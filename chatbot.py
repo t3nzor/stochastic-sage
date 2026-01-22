@@ -1,4 +1,4 @@
-#!/home/t3nzor/venv/bin/python
+#!/usr/bin/env python
 #
 # Written by ChatGPT with user tweaks
 #
