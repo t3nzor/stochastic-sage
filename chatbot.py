@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 #
-# Written by ChatGPT with user tweaks
-#
 # Prerequisites:
 # pip install gradio transformers accelerate torch
 # 
@@ -57,7 +55,8 @@ def chat(user_input, messages):
         return_tensors="pt"
     ).to(model.device)
 
-    new_seed = rng.getrandbits(32)
+    new_seed = rng.getrandbits(24)
+    # TODO: update page element with value and RGB color
     print(new_seed, file=sys.stderr)
     reseed(new_seed)
 
@@ -80,7 +79,7 @@ def chat(user_input, messages):
     return messages
 
 with gr.Blocks() as demo:
-    gr.Markdown("## 🤖 Qwen Chatbot (12GB GPU Friendly)")
+    gr.Markdown("## 🤖 Stochastic Sage")
 
     chatbot = gr.Chatbot()
     state = gr.State([])
