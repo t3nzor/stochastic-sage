@@ -1,7 +1,7 @@
 # AGENTS.md - Agentic Coding Guidelines for stochastic-sage
 
 ## Project Overview
-This is a Python project - a Gradio-based chatbot using Qwen2.5-3B model. It uses `gradio`, `transformers`, `accelerate`, and `torch`.
+This is a Python project - a Gradio-based chatbot using Qwen3.5-9B model. It uses `gradio`, `transformers`, `accelerate`, and `torch`.
 
 ## Build/Lint/Test Commands
 

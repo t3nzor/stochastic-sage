@@ -1,15 +1,18 @@
-#!/usr/bin/env python
+#!/home/t3nzor/venv/bin/python
 #
 # Prerequisites:
 # pip install gradio transformers accelerate torch
 # 
 
+import queue
 import random, sys
+from threading import Thread
 import gradio as gr
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
+#MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"
+MODEL_ID = "Qwen/Qwen3.5-9B"
 
 SYSTEM_PROMPT = (
     "You are a helpful, accurate, and concise AI assistant. "
@@ -34,6 +37,34 @@ def reseed(seed):
     # random.seed(seed)
     # np.random.seed(seed)
 
+class TokenStreamer:
+    """Collects generated token IDs and makes full decoded text available via an iterator."""
+
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+        self.token_ids: list[int] = []
+        self.queue: queue.Queue[str | None] = queue.Queue()
+
+    def put(self, value):
+        if len(value.shape) > 1:
+            value = value[0]
+        self.token_ids.append(value[-1].item())
+        text = self.tokenizer.decode(self.token_ids, skip_special_tokens=True)
+        self.queue.put(text)
+
+    def end(self):
+        self.queue.put(None)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        value = self.queue.get()
+        if value is None:
+            raise StopIteration
+        return value
+
+
 def chat(user_input, messages):
     if messages is None:
         messages = []
@@ -50,33 +81,37 @@ def chat(user_input, messages):
         add_generation_prompt=True
     )
 
-    inputs = tokenizer(
-        prompt,
-        return_tensors="pt"
-    ).to(model.device)
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
     new_seed = rng.getrandbits(24)
     # TODO: update page element with value and RGB color
     print(new_seed, file=sys.stderr)
     reseed(new_seed)
 
-    outputs = model.generate(
+    streamer = TokenStreamer(tokenizer)
+
+    generation_kwargs = dict(
         **inputs,
-        max_new_tokens=300,
+        max_new_tokens=3000,
         temperature=0.7,
         top_p=0.9,
-        do_sample=True
+        do_sample=True,
+        streamer=streamer,
     )
 
-    bot_reply = tokenizer.decode(
-        outputs[0][inputs["input_ids"].shape[-1]:],
-        skip_special_tokens=True
-    ).strip()
+    thread = Thread(target=model.generate, kwargs=generation_kwargs)
+    thread.start()
 
     messages.append({"role": "user", "content": user_input})
-    messages.append({"role": "assistant", "content": bot_reply})
+    messages.append({"role": "assistant", "content": ""})
 
-    return messages
+    bot_reply = ""
+    for text in streamer:
+        bot_reply = text
+        messages[-1] = {"role": "assistant", "content": bot_reply}
+        yield messages, messages, ""
+
+    thread.join()
 
 with gr.Blocks() as demo:
     gr.Markdown("## 🤖 Stochastic Sage")
@@ -92,9 +127,7 @@ with gr.Blocks() as demo:
     user_input.submit(
         chat,
         inputs=[user_input, state],
-        outputs=[chatbot]
-    ).then(
-        lambda: "", None, user_input
+        outputs=[chatbot, state, user_input]
     )
 
-demo.launch()
+demo.queue(default_concurrency_limit=1).launch(share=True)
